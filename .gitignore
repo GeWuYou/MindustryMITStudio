@@ -2,4 +2,5 @@
 /.codegraph
 /.gradle
 /.idea
+/.kotlin
 /build

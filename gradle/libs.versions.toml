@@ -1,0 +1,21 @@
+[versions]
+kotlin = "2.3.21"
+kotlinx-serialization-json = "1.11.0"
+kotlinx-coroutines = "1.10.2"
+jsoup = "1.22.2"
+java-websocket = "1.5.4"
+mindustry = "v157.4"
+shadow = "8.3.6"
+
+[libraries]
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
+mindustry-core = { module = "com.github.Anuken.Mindustry:core", version.ref = "mindustry" }
+arc-core = { module = "com.github.Anuken.Arc:arc-core", version.ref = "mindustry" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

@@ -23,12 +23,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      - name: Build tool.jar
-        run: ./gradlew shadowJar --no-daemon --stacktrace
+      - name: Build server jar
+        run: ./gradlew :server:shadowJar --no-daemon --stacktrace
 
-      - name: Upload tool.jar artifact
+      - name: Upload server jar artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tool-jar
-          path: build/libs/*.jar
+          name: mindustrymit-server-jar
+          path: server/build/libs/*.jar
           if-no-files-found: error

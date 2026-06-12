@@ -37,6 +37,18 @@
 
 ### 2. 启动服务器
 
+项目已拆分为 Gradle 多模块结构，当前后端位于 `server` 模块。可直接运行：
+
+```bash
+bash ./gradlew :server:run
+```
+
+构建独立后端包：
+
+```bash
+bash ./gradlew :server:shadowJar
+```
+
 ```kotlin
 fun main() {
     val api = JsonApi()

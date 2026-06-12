@@ -26,6 +26,7 @@ export interface Data {
 
 export interface WebSocketData {
   wsType: WebSocketDataType;
+  requestId?: string;
   content?: string;
   out?: boolean;
   dataList?: Record<string, Data>;
@@ -97,8 +98,16 @@ function readOperationResult(response: WebSocketData): MindustryMitOperationResu
   };
 }
 
+interface PendingRequest {
+  reject: (reason?: unknown) => void;
+  resolve: (value: WebSocketData) => void;
+}
+
 export class MindustryMitClient {
   private socket?: WebSocket;
+  private connectPromise?: Promise<void>;
+  private readonly pendingRequests = new Map<string, PendingRequest>();
+  private requestSequence = 0;
 
   constructor(private readonly url: string) {}
 
@@ -108,23 +117,53 @@ export class MindustryMitClient {
 
   connect(): Promise<void> {
     if (this.isOpen) return Promise.resolve();
+    if (this.connectPromise) return this.connectPromise;
 
-    return new Promise((resolve, reject) => {
+    this.connectPromise = new Promise((resolve, reject) => {
       const socket = new WebSocket(this.url);
       this.socket = socket;
 
-      socket.addEventListener('open', () => resolve(), { once: true });
+      const cleanup = () => {
+        socket.removeEventListener('open', onOpen);
+        socket.removeEventListener('error', onConnectError);
+      };
+
+      const onOpen = () => {
+        cleanup();
+        this.connectPromise = undefined;
+        resolve();
+      };
+
+      const onConnectError = () => {
+        cleanup();
+        this.connectPromise = undefined;
+        this.socket = undefined;
+        reject(new Error(`无法连接到 ${this.url}`));
+      };
+
+      socket.addEventListener('open', onOpen, { once: true });
       socket.addEventListener(
         'error',
-        () => reject(new Error(`无法连接到 ${this.url}`)),
+        onConnectError,
         { once: true },
       );
+      socket.addEventListener('message', (event: MessageEvent<string>) => this.handleMessage(event));
+      socket.addEventListener('error', () => this.rejectPending(new Error('WebSocket 请求失败')));
+      socket.addEventListener('close', () => {
+        this.connectPromise = undefined;
+        this.socket = undefined;
+        this.rejectPending(new Error('WebSocket 连接已关闭'));
+      });
     });
+
+    return this.connectPromise;
   }
 
   close() {
     this.socket?.close();
     this.socket = undefined;
+    this.connectPromise = undefined;
+    this.rejectPending(new Error('WebSocket 连接已关闭'));
   }
 
   async request({ wsType, content = {} }: MindustryMitRequest): Promise<WebSocketData> {
@@ -137,45 +176,18 @@ export class MindustryMitClient {
 
     const payload: WebSocketData = {
       wsType,
+      requestId: this.nextRequestId(),
       content: JSON.stringify(content),
     };
 
     return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        socket.removeEventListener('message', onMessage);
-        socket.removeEventListener('error', onError);
-        socket.removeEventListener('close', onClose);
-      };
-
-      const onMessage = (event: MessageEvent<string>) => {
-        cleanup();
-        try {
-          const response = JSON.parse(event.data) as WebSocketData;
-          if (response.wsType === 'Error') {
-            const message = response.dataList?.Message?.str || '后端返回错误';
-            reject(new Error(message));
-            return;
-          }
-          resolve(response);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      const onError = () => {
-        cleanup();
-        reject(new Error('WebSocket 请求失败'));
-      };
-
-      const onClose = () => {
-        cleanup();
-        reject(new Error('WebSocket 连接已关闭'));
-      };
-
-      socket.addEventListener('message', onMessage);
-      socket.addEventListener('error', onError);
-      socket.addEventListener('close', onClose);
-      socket.send(JSON.stringify(payload));
+      this.pendingRequests.set(payload.requestId!, { reject, resolve });
+      try {
+        socket.send(JSON.stringify(payload));
+      } catch (error) {
+        this.pendingRequests.delete(payload.requestId!);
+        reject(error);
+      }
     });
   }
 
@@ -322,6 +334,59 @@ export class MindustryMitClient {
       ...readOperationResult(response),
       docCount: readInt(response, 'Doc_Count'),
     };
+  }
+
+  private handleMessage(event: MessageEvent<string>) {
+    let response: WebSocketData;
+    try {
+      response = JSON.parse(event.data) as WebSocketData;
+    } catch (error) {
+      this.rejectPending(error);
+      return;
+    }
+
+    const requestId = response.requestId;
+    const pending = requestId ? this.pendingRequests.get(requestId) : undefined;
+    if (!pending) {
+      if (requestId) return;
+
+      if (!requestId && this.pendingRequests.size === 1) {
+        const [legacyPending] = this.pendingRequests.values();
+        this.pendingRequests.clear();
+        if (response.wsType === 'Error') {
+          legacyPending.reject(new Error(response.dataList?.Message?.str || '后端返回错误'));
+          return;
+        }
+        legacyPending.resolve(response);
+        return;
+      }
+
+      if (response.wsType === 'Error') {
+        this.rejectPending(new Error(response.dataList?.Message?.str || '后端返回错误'));
+        return;
+      }
+      this.rejectPending(new Error('WebSocket 响应缺少 requestId，无法匹配并发请求'));
+      return;
+    }
+
+    this.pendingRequests.delete(requestId!);
+    if (response.wsType === 'Error') {
+      pending.reject(new Error(response.dataList?.Message?.str || '后端返回错误'));
+      return;
+    }
+
+    pending.resolve(response);
+  }
+
+  private nextRequestId() {
+    this.requestSequence += 1;
+    return `${Date.now().toString(36)}-${this.requestSequence.toString(36)}`;
+  }
+
+  private rejectPending(error: unknown) {
+    const pendingRequests = [...this.pendingRequests.values()];
+    this.pendingRequests.clear();
+    pendingRequests.forEach((pending) => pending.reject(error));
   }
 }
 

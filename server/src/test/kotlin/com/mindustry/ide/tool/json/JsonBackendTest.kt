@@ -1,8 +1,10 @@
 package com.mindustry.ide.tool.json
 
+import com.mindustry.ide.tool.json.JsonParser.Companion.jsonFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class JsonBackendTest {
 
@@ -25,6 +27,57 @@ class JsonBackendTest {
         assertFailsWith<IllegalArgumentException> {
             ArithmeticParser("1 + * 2").parse()
         }
+    }
+
+    @Test
+    fun replyIncludesRequestIdWhenProvided() {
+        val reply = WebSocketData.reply(
+            WebSocketDataType.AllClass,
+            mapOf("Class_List" to Data()),
+            requestId = "req-1"
+        )
+
+        assertEquals("req-1", reply.requestId)
+    }
+
+    @Test
+    fun errorResponseIncludesRequestIdWhenProvided() {
+        val response = JsonApi.ToolData().errorResponse("failed", requestId = "req-2")
+
+        assertEquals("req-2", decodeWebSocketData(response).requestId)
+    }
+
+    @Test
+    fun contentParsingEchoesRequestIdOnSuccess() {
+        val response = JsonApi.ToolData().contentParsing(
+            """{"wsType":"AllClass","requestId":"req-3"}"""
+        )
+
+        assertEquals("req-3", decodeWebSocketData(response).requestId)
+    }
+
+    @Test
+    fun contentParsingEchoesRequestIdOnRequestValidationError() {
+        val response = JsonApi.ToolData().contentParsing(
+            """{"wsType":"AllField","requestId":"req-4","content":"{}"}"""
+        )
+        val decoded = decodeWebSocketData(response)
+
+        assertEquals(WebSocketDataType.Error, decoded.wsType)
+        assertEquals("req-4", decoded.requestId)
+    }
+
+    @Test
+    fun contentParsingKeepsMissingRequestIdCompatible() {
+        val response = JsonApi.ToolData().contentParsing(
+            """{"wsType":"AllClass"}"""
+        )
+
+        assertNull(decodeWebSocketData(response).requestId)
+    }
+
+    private fun decodeWebSocketData(value: String): WebSocketData {
+        return jsonFormat.decodeFromString(WebSocketData.serializer(), value)
     }
 
     private sealed interface ExprNode {

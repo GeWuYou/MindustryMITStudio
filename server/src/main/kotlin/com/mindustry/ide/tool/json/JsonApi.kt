@@ -411,95 +411,123 @@ class JsonApi {
             throw IllegalArgumentException(message)
         }
 
-        fun errorResponse(message: String, sourceType: WebSocketDataType? = null): String {
+        fun errorResponse(
+            message: String,
+            sourceType: WebSocketDataType? = null,
+            requestId: String? = null
+        ): String {
             val reply = WebSocketData.reply(
                 WebSocketDataType.Error,
                 mapOf(
                     "Success" to Data(boolean = false),
                     "Message" to Data(str = message),
                     "Source_Type" to Data(str = sourceType?.name ?: "")
-                )
+                ),
+                requestId = requestId
             )
+            return jsonFormat.encodeToString(WebSocketData.serializer(), reply)
+        }
+
+        private fun respondTo(
+            request: WebSocketData,
+            wsType: WebSocketDataType,
+            data: Map<String, Data> = emptyMap()
+        ): String {
+            val reply = WebSocketData.reply(wsType, data, requestId = request.requestId)
             return jsonFormat.encodeToString(WebSocketData.serializer(), reply)
         }
 
         private val json1 = Json { prettyPrint = true }
 
+        fun requestIdFromRawMessage(message: String): String? {
+            return runCatching {
+                Json.parseToJsonElement(message).jsonObject["requestId"]?.jsonPrimitive?.contentOrNull
+            }.getOrNull()
+        }
+
         fun contentParsing(message: String): String {
+            val requestId = requestIdFromRawMessage(message)
             val data = try {
                 jsonFormat.decodeFromString(WebSocketData.serializer(), message)
             } catch (e: Exception) {
-                return errorResponse("请求格式错误: ${e.message ?: e::class.java.name}")
+                return errorResponse(
+                    "请求格式错误: ${e.message ?: e::class.java.name}",
+                    requestId = requestId
+                )
             }
 
             return try {
                 when (data.wsType) {
                     WebSocketDataType.Error -> {
-                        errorResponse("Error 请求类型不能作为业务请求", WebSocketDataType.Error)
+                        errorResponse(
+                            "Error 请求类型不能作为业务请求",
+                            WebSocketDataType.Error,
+                            requestId = data.requestId
+                        )
                     }
 
                     WebSocketDataType.Init -> {
                         val dataDir = data.dataList["Data_Dir"]?.str ?: ""
                         val result = initBackend(dataDir)
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.Init, mapOf(
                                 "Success" to Data(boolean = result.success),
                                 "Doc_Count" to Data(int = result.docCount),
                                 "Message" to Data(str = result.message)
                             )
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.AllClass -> {
                         val classList = parser.getAllClasses()
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.AllClass,
                             mapOf("Class_List" to Data(list = classList.map { Data(str = it) }.toMutableList()))
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.AllField -> {
                         val className = data.dataList["Class_Name"]?.str ?: ""
                         val fields = parser.getAllFields(className).map { it.name }
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.AllField,
                             mapOf("Field_List" to Data(list = fields.map { Data(str = it) }.toMutableList()))
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.ClassInstance -> {
                         val className = data.dataList["Class_Name"]?.str ?: ""
                         val objects = getClassInstances(className)
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.ClassInstance,
                             mapOf("Object_List" to Data(list = objects.map { Data(str = it) }.toMutableList()))
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.FieldDoc -> {
                         val className = data.dataList["Class_Name"]?.str ?: ""
                         val fieldName = data.dataList["Field_Name"]?.str ?: ""
                         val fieldDoc = parser.getFieldDoc(className, fieldName)
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.FieldDoc,
                             mapOf("Field_Doc" to Data(str = fieldDoc))
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.FieldDefaultValue -> {
                         val className = data.dataList["Class_Name"]?.str ?: ""
                         val fieldName = data.dataList["Field_Name"]?.str ?: ""
                         val defaultValue = parser.getFieldDefaultValue(className, fieldName)
-                        val reply = WebSocketData.reply(
+                        respondTo(
+                            data,
                             WebSocketDataType.FieldDefaultValue,
                             mapOf("Default_Value" to Data(str = defaultValue))
                         )
-                        jsonFormat.encodeToString(WebSocketData.serializer(), reply)
                     }
 
                     WebSocketDataType.GetFieldValue -> {
@@ -512,7 +540,8 @@ class JsonApi {
                                     "Success" to Data(boolean = true),
                                     "Value" to Data(str = value),
                                     "Message" to Data()
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         } catch (e: Exception) {
                             WebSocketData.reply(
@@ -521,7 +550,8 @@ class JsonApi {
                                     "Success" to Data(boolean = false),
                                     "Value" to Data(),
                                     "Message" to Data(str = e.message ?: e::class.java.name)
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         }
                         jsonFormat.encodeToString(WebSocketData.serializer(), reply)
@@ -538,7 +568,8 @@ class JsonApi {
                                     "Success" to Data(boolean = true),
                                     "Value" to Data(str = jsonValue),
                                     "Message" to Data()
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         } catch (e: Exception) {
                             WebSocketData.reply(
@@ -547,7 +578,8 @@ class JsonApi {
                                     "Success" to Data(boolean = false),
                                     "Value" to Data(),
                                     "Message" to Data(str = e.message ?: e::class.java.name)
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         }
                         jsonFormat.encodeToString(WebSocketData.serializer(), reply)
@@ -565,7 +597,8 @@ class JsonApi {
                                     "Success" to Data(boolean = true),
                                     "Index" to Data(int = index),
                                     "Message" to Data()
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         } catch (e: Exception) {
                             WebSocketData.reply(
@@ -574,7 +607,8 @@ class JsonApi {
                                     "Success" to Data(boolean = false),
                                     "Index" to Data(int = -1),
                                     "Message" to Data(str = e.message ?: e::class.java.name)
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         }
                         jsonFormat.encodeToString(WebSocketData.serializer(), reply)
@@ -589,7 +623,8 @@ class JsonApi {
                                     "Success" to Data(boolean = true),
                                     "Content" to Data(str = exportClass(classId)),
                                     "Message" to Data()
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         } catch (e: Exception) {
                             WebSocketData.reply(
@@ -598,7 +633,8 @@ class JsonApi {
                                     "Success" to Data(boolean = false),
                                     "Content" to Data(),
                                     "Message" to Data(str = e.message ?: e::class.java.name)
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         }
                         jsonFormat.encodeToString(WebSocketData.serializer(), reply)
@@ -610,7 +646,9 @@ class JsonApi {
 
                         jsonFormat.encodeToString(
                             WebSocketData.serializer(), WebSocketData.reply(
-                                WebSocketDataType.NewClass, mapOf("Class_Id" to Data(int = classId))
+                                WebSocketDataType.NewClass,
+                                mapOf("Class_Id" to Data(int = classId)),
+                                requestId = data.requestId
                             )
                         )
                     }
@@ -621,7 +659,9 @@ class JsonApi {
 
                         jsonFormat.encodeToString(
                             WebSocketData.serializer(), WebSocketData.reply(
-                                WebSocketDataType.RemoveClass, mapOf("Success" to Data(boolean = success))
+                                WebSocketDataType.RemoveClass,
+                                mapOf("Success" to Data(boolean = success)),
+                                requestId = data.requestId
                             )
                         )
                     }
@@ -647,7 +687,8 @@ class JsonApi {
                                     "Success" to Data(boolean = results.isNotEmpty()),
                                     "Doc_Count" to Data(int = results.size),
                                     "Message" to Data(str = "Fetched ${results.size} types to ${docDir.absolutePath}")
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         } catch (e: Exception) {
                             WebSocketData.reply(
@@ -655,7 +696,8 @@ class JsonApi {
                                     "Success" to Data(boolean = false),
                                     "Doc_Count" to Data(int = 0),
                                     "Message" to Data(str = e.message ?: e::class.java.name)
-                                )
+                                ),
+                                requestId = data.requestId
                             )
                         }
                         jsonFormat.encodeToString(WebSocketData.serializer(), reply)
@@ -664,7 +706,7 @@ class JsonApi {
 
                 }
             } catch (e: Exception) {
-                errorResponse(e.message ?: e::class.java.name, data.wsType)
+                errorResponse(e.message ?: e::class.java.name, data.wsType, requestId = data.requestId)
             }
         }
 
@@ -773,7 +815,12 @@ class JsonApi {
                 override fun onMessage(conn: WebSocket, message: String) {
                     handler.toolData.debug("收到消息: ${message.take(240)}")
                     if (!handler.isAuthorized(message)) {
-                        conn.send(handler.toolData.errorResponse("未授权的 WebSocket 请求"))
+                        conn.send(
+                            handler.toolData.errorResponse(
+                                "未授权的 WebSocket 请求",
+                                requestId = handler.toolData.requestIdFromRawMessage(message)
+                            )
+                        )
                         return
                     }
                     val response = handler.toolData.contentParsing(message)
@@ -815,6 +862,7 @@ class JsonApi {
 @Serializable
 data class WebSocketData(
     var wsType: WebSocketDataType,
+    var requestId: String? = null,
     var content: String = "",
     var out: Boolean = false,
     var dataList: MutableMap<String, Data> = mutableMapOf()
@@ -871,8 +919,13 @@ data class WebSocketData(
 
     companion object {
         /** 构造回复消息，data 的 key 需与 wsType.output 中的字段名对应 */
-        fun reply(wsType: WebSocketDataType, data: Map<String, Data> = emptyMap()): WebSocketData {
-            return WebSocketData(wsType = wsType, out = true).also { it.dataList.putAll(data) }
+        fun reply(
+            wsType: WebSocketDataType,
+            data: Map<String, Data> = emptyMap(),
+            requestId: String? = null
+        ): WebSocketData {
+            return WebSocketData(wsType = wsType, requestId = requestId, out = true)
+                .also { it.dataList.putAll(data) }
         }
     }
 }

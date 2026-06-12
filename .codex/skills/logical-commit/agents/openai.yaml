@@ -1,0 +1,4 @@
+interface:
+  display_name: "逻辑提交"
+  short_description: "按可回滚的逻辑边界整理本地变更并生成规范中文提交记录"
+  default_prompt: "Use $logical-commit to inspect local changes, split them into logical commits, and write Chinese Conventional Commit messages."

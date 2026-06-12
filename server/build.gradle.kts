@@ -8,10 +8,8 @@ plugins {
 }
 
 dependencies {
-    compileOnly(libs.mindustry.core)
-    compileOnly(libs.arc.core)
-    runtimeOnly(libs.mindustry.core)
-    runtimeOnly(libs.arc.core)
+    implementation(libs.mindustry.core)
+    implementation(libs.arc.core)
 
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
@@ -19,8 +17,6 @@ dependencies {
     implementation(libs.java.websocket)
 
     testImplementation(kotlin("test"))
-    testImplementation(libs.mindustry.core)
-    testImplementation(libs.arc.core)
 }
 
 application {

@@ -28,6 +28,17 @@ application {
 
 tasks.withType<JavaExec> {
     jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+    listOf(
+        "mindustrymit.envFile",
+        "mindustrymit.wsHost",
+        "mindustrymit.wsPort",
+        "mindustrymit.dataRoot",
+        "mindustrymit.logDir",
+        "mindustrymit.wsToken",
+        "logback.rootLevel"
+    ).forEach { name ->
+        System.getProperty(name)?.let { systemProperty(name, it) }
+    }
 }
 
 tasks.jar {

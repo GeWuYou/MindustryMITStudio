@@ -5,7 +5,7 @@ Vue 3 + Vite + TDesign Vue Next frontend for MindustryMITStudio.
 ## Requirements
 
 - Bun 1.3 or newer
-- Kotlin backend running at `ws://127.0.0.1:19190`
+- Kotlin backend running at `ws://localhost:19190`
 
 ## Development
 
@@ -17,8 +17,17 @@ bun run dev
 Override the backend endpoint with:
 
 ```bash
-VITE_WS_URL=ws://127.0.0.1:19190
+cp .env.example .env
 ```
+
+Edit `.env` when the backend is exposed on a different address:
+
+```dotenv
+VITE_WS_URL=ws://localhost:19190
+```
+
+For WSL localhost forwarding issues, try `ws://127.0.0.1:19190` or
+`ws://[::1]:19190` depending on which address Windows exposes.
 
 ## Build
 

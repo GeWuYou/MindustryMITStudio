@@ -5,3 +5,6 @@
 /.kotlin
 /build
 /.mindustrymit-data
+/.env
+/server/.env
+/frontend/.env

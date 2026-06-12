@@ -45,4 +45,4 @@ Pull requests should describe the change, list commands run, link related issues
 
 ## Security & Configuration Tips
 
-The backend listens on `ws://127.0.0.1:19190` by default. Use `mindustrymit.wsToken` for token-protected local runs and `mindustrymit.dataRoot` to control document/data storage.
+The backend listens on `ws://localhost:19190` by default and binds to `0.0.0.0:19190` for local development. Use `server/.env`, environment variables, or `mindustrymit.*` JVM properties to control host, port, token, data root, and log directory.

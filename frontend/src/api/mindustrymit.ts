@@ -119,4 +119,4 @@ export class MindustryMitClient {
   }
 }
 
-export const defaultWsUrl = import.meta.env.VITE_WS_URL || 'ws://127.0.0.1:19190';
+export const defaultWsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:19190';

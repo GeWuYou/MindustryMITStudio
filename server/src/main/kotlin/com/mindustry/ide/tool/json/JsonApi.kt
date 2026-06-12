@@ -1,6 +1,7 @@
 package com.mindustry.ide.tool.json
 
 import com.mindustry.ide.tool.Logging
+import com.mindustry.ide.tool.MindustryMitConfig
 import com.mindustry.ide.tool.json.JsonApi.ToolData.JsonApiWebSocketHandler
 import com.mindustry.ide.tool.json.JsonParser.Companion.jsonFormat
 import kotlinx.serialization.Serializable
@@ -61,7 +62,7 @@ class JsonApi {
 
     class ToolData(
         val parser: JsonParser = JsonParser(),
-        dataRoot: File = File(System.getProperty("mindustrymit.dataRoot", ".mindustrymit-data")).absoluteFile
+        dataRoot: File = File(MindustryMitConfig.dataRoot).absoluteFile
     ) {
         val classDataMap: MutableMap<Int, Tool> = ConcurrentHashMap()
         val classBuildMap: MutableMap<Int, ClassBuild> = ConcurrentHashMap()
@@ -87,7 +88,7 @@ class JsonApi {
 
         companion object {
             fun defaultDataRoot(): File {
-                return File(System.getProperty("mindustrymit.dataRoot", ".mindustrymit-data")).absoluteFile
+                return File(MindustryMitConfig.dataRoot).absoluteFile
             }
         }
 
@@ -687,9 +688,9 @@ class JsonApi {
 
         class JsonApiWebSocketHandler(
             val toolData: ToolData = ToolData(),
-            val port: Int = 19190,
-            private val bindHost: String = "127.0.0.1",
-            private val token: String? = System.getProperty("mindustrymit.wsToken")?.takeIf { it.isNotBlank() },
+            val port: Int = MindustryMitConfig.wsPort,
+            private val bindHost: String = MindustryMitConfig.wsHost,
+            private val token: String? = MindustryMitConfig.wsToken,
             private val allowedOrigins: Set<String> = emptySet()
         ) {
             private var server: Server? = null

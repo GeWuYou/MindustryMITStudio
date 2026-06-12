@@ -56,10 +56,31 @@ fun main() {
 }
 ```
 
-启动后服务器监听 `ws://127.0.0.1:19190`。可通过系统属性修改配置：
+启动后服务器默认监听 `0.0.0.0:19190`，本机客户端通常连接 `ws://localhost:19190`。
+配置优先级为 JVM 系统属性 > 环境变量 > `server/.env` > 默认值。
+
+复制后端配置样例：
+
+```bash
+cp server/.env.example server/.env
+```
+
+`.env` 支持的常用配置：
+
+```dotenv
+MINDUSTRYMIT_WS_HOST=0.0.0.0
+MINDUSTRYMIT_WS_PORT=19190
+MINDUSTRYMIT_DATA_ROOT=.mindustrymit-data
+MINDUSTRYMIT_LOG_DIR=.mindustrymit-data/logs
+MINDUSTRYMIT_WS_TOKEN=
+```
+
+也可通过系统属性修改配置：
 
 | 系统属性 | 说明 | 示例 |
 |----------|------|------|
+| `mindustrymit.wsHost` | WebSocket 监听地址（默认 `0.0.0.0`） | `-Dmindustrymit.wsHost=127.0.0.1` |
+| `mindustrymit.wsPort` | WebSocket 监听端口（默认 `19190`） | `-Dmindustrymit.wsPort=19191` |
 | `mindustrymit.dataRoot` | 数据根目录（文档存储位置） | `-Dmindustrymit.dataRoot=/path/to/data` |
 | `mindustrymit.logDir` | 日志目录（默认 `${mindustrymit.dataRoot}/logs`） | `-Dmindustrymit.logDir=/path/to/logs` |
 | `logback.rootLevel` | 后端日志级别（默认 `INFO`） | `-Dlogback.rootLevel=DEBUG` |
@@ -68,7 +89,7 @@ fun main() {
 ### 3. 客户端连接示例（JavaScript）
 
 ```javascript
-const ws = new WebSocket('ws://127.0.0.1:19190');
+const ws = new WebSocket('ws://localhost:19190');
 
 ws.onopen = () => {
     console.log('已连接');
@@ -646,7 +667,7 @@ interface Data {
 以下示例使用伪代码演示如何创建一个 `Block` 类型实例、修改其字段并导出。
 
 ```javascript
-const ws = new WebSocket('ws://127.0.0.1:19190');
+const ws = new WebSocket('ws://localhost:19190');
 let classId;
 
 ws.onopen = () => {
@@ -704,7 +725,7 @@ ws.onmessage = (e) => {
 
 ## 安全注意事项
 
-1. **默认认证**：若未设置系统属性 `mindustrymit.wsToken`，服务器接受任何客户端连接。生产环境务必设置 Token。
+1. **默认认证**：若未设置 `mindustrymit.wsToken` / `MINDUSTRYMIT_WS_TOKEN`，服务器接受任何客户端连接。生产环境务必设置 Token。
 
 2. **Token 使用**：每条消息需在顶层或 `content` 对象中包含 `Token` 字段，例如：
    ```json
@@ -726,7 +747,10 @@ ws.onmessage = (e) => {
 ## 常见问题
 
 **Q: 启动时端口被占用怎么办？**
-A: 修改 `JsonApiWebSocketHandler` 构造函数的 `port` 参数（默认 19190）。
+A: 修改 `server/.env` 中的 `MINDUSTRYMIT_WS_PORT`，或使用 `-Dmindustrymit.wsPort=19191` 启动。
+
+**Q: WSL 中后端启动了，但 Windows 浏览器连不上怎么办？**
+A: 默认后端绑定 `0.0.0.0` 以便 WSL/宿主机访问。若仍遇到 Windows localhost 转发只暴露 IPv6 或 IPv4 的情况，在 `frontend/.env` 中把 `VITE_WS_URL` 改成实际可达地址，例如 `ws://localhost:19190`、`ws://127.0.0.1:19190` 或 `ws://[::1]:19190`。
 
 **Q: 文档目录没有内容怎么办？**
 A: 调用 `Init` 时会优先使用 `Data_Dir/doc` 下已有 JSON；没有文档时会尝试解压打包在资源里的 `doc.zip` / `docs.zip` / `mindustry-doc.zip`。如果资源包也没有，再调用 `FetchDoc` 从 Mindustry Wiki 抓取。

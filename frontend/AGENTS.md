@@ -13,7 +13,7 @@
 - `bun run preview` serves the built bundle locally.
 - `bash ../gradlew :frontend:build` runs the same build through Gradle.
 
-Set `VITE_WS_URL=ws://127.0.0.1:19190` when pointing the client at a non-default backend.
+Set `VITE_WS_URL=ws://localhost:19190` in `frontend/.env` when pointing the client at a non-default backend.
 
 ## Coding Style & Naming Conventions
 

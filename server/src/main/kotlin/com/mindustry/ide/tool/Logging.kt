@@ -4,8 +4,10 @@ import java.io.File
 
 object Logging {
     fun configureDefaults() {
+        MindustryMitConfig.applySystemPropertyDefaults()
+
         if (System.getProperty("mindustrymit.logDir").isNullOrBlank()) {
-            val dataRoot = System.getProperty("mindustrymit.dataRoot", ".mindustrymit-data")
+            val dataRoot = MindustryMitConfig.dataRoot
             System.setProperty("mindustrymit.logDir", File(dataRoot, "logs").path)
         }
 

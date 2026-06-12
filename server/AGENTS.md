@@ -24,7 +24,7 @@ Use `kotlin.test` assertions and `@Test` methods. Prefer descriptive camelCase t
 
 ## Security & Configuration Tips
 
-Default local endpoint is `ws://127.0.0.1:19190`. Configuration is provided through JVM system properties such as `mindustrymit.dataRoot` and `mindustrymit.wsToken`. Do not hard-code local secrets, absolute user paths, or production tokens in tests or examples.
+Default local endpoint is `ws://localhost:19190`, with the development server binding to `0.0.0.0:19190` for WSL/host access. Configuration is provided through JVM system properties, environment variables, or `server/.env`; do not hard-code local secrets, absolute user paths, or production tokens in tests or examples.
 
 ## Commit & Pull Request Guidelines
 

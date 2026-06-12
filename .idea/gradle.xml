@@ -9,12 +9,10 @@
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/frontend" />
+            <option value="$PROJECT_DIR$/server" />
           </set>
         </option>
-      </GradleProjectSettings>
-      <GradleProjectSettings>
-        <option name="externalProjectPath" value="//wsl.localhost/Ubuntu-24.04/home/gewuyou/project/kt/MindustryMITStudio" />
-        <option name="gradleJvm" value="graalvm-ce-21" />
       </GradleProjectSettings>
     </option>
     <option name="parallelModelFetch" value="true" />

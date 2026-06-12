@@ -32,3 +32,4 @@ dependencyResolutionManagement {
 rootProject.name = "MindustryMITStudio"
 
 include(":server")
+include(":frontend")

@@ -4,7 +4,10 @@ plugins {
     base
 }
 
-val bunExecutable = providers.gradleProperty("bun.executable").orElse("bun")
+val bunExecutable = providers.gradleProperty("bun.executable")
+    .orElse(providers.environmentVariable("BUN_EXECUTABLE"))
+    .orElse(providers.environmentVariable("BUN_INSTALL").map { "$it/bin/bun" })
+    .orElse("bun")
 
 fun Exec.bunCommand(vararg args: String) {
     workingDir = projectDir

@@ -15,6 +15,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.jsoup)
     implementation(libs.java.websocket)
+    implementation(libs.slf4j.api)
+
+    runtimeOnly(libs.logback.classic)
 
     testImplementation(kotlin("test"))
 }

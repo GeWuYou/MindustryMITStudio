@@ -10,7 +10,6 @@ class JsonBackendTest {
     fun buildsBinaryTreeByOperatorPrecedence() {
         val tree = ArithmeticParser("1 + 2 * 3 - 4 / 2").parse()
 
-        println("1 + 2 * 3 - 4 / 2 => ${tree.toTreeString()}")
         assertEquals("(- (+ 1 (* 2 3)) (/ 4 2))", tree.toTreeString())
     }
 
@@ -18,7 +17,6 @@ class JsonBackendTest {
     fun parenthesesOverrideOperatorPrecedence() {
         val tree = ArithmeticParser("(1 + 2) * (3 - 4) / 5").parse()
 
-        println("(1 + 2) * (3 - 4) / 5 => ${tree.toTreeString()}")
         assertEquals("(/ (* (+ 1 2) (- 3 4)) 5)", tree.toTreeString())
     }
 

@@ -1,6 +1,7 @@
 package com.mindustry.ide.tool.json.libs
 
 
+import com.mindustry.ide.tool.Logging
 import com.mindustry.ide.tool.json.FieldMeta
 import com.mindustry.ide.tool.json.TypeMeta
 import kotlinx.coroutines.*
@@ -10,6 +11,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import org.slf4j.LoggerFactory
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -41,6 +43,11 @@ data class DocFetchConfig(
 
 open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
     companion object {
+        private val logger = run {
+            Logging.configureDefaults()
+            LoggerFactory.getLogger(DocFetch::class.java)
+        }
+
         var ASYNC_LIMIT = 12 // 并发数量
         const val ESTIMATE_TIME_MS = 500L // 预估单次请求时间（毫秒）
         var TEST_AMOUNT = -1 // 测试数量，-1表示全部
@@ -56,6 +63,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
     }
 
     protected var progressCallback: ((Int, Int, Int, Int) -> Unit)? = null
+    private val lastLoggedProgressBucket = AtomicInteger(-1)
 
     open suspend fun execute(): List<TypeMeta> {
         val allDocs = fetchModdingDocs().distinctBy { it.title }
@@ -67,13 +75,12 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
         }
 
         if (fetchDocs.isEmpty()) {
-            println("No docs needed to fetch meta.")
+            logger.info("No docs needed to fetch meta.")
             return emptyList()
         }
 
-        println("Found ${fetchDocs.size} modding docs.")
-        println("Concurrency: ${config.asyncLimit}")
-        println()
+        logger.info("Found {} modding docs.", fetchDocs.size)
+        logger.info("Concurrency: {}", config.asyncLimit)
 
         val results = fetchAllMeta(fetchDocs)
         val successResults = results.filterNotNull()
@@ -84,7 +91,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
 
         val failedCount = results.count { it == null }
 
-        println("\n\nDone. Success: ${successResults.size}, Failed: $failedCount")
+        logger.info("Done. Success: {}, Failed: {}", successResults.size, failedCount)
 
         return successResults
     }
@@ -107,6 +114,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
         val failedCount = AtomicInteger()
         val total = docs.size
 
+        lastLoggedProgressBucket.set(-1)
         updateProgress(0, total, 0, 0)
 
         return coroutineScope {
@@ -127,6 +135,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
                         val failed = failedCount.incrementAndGet()
                         val current = completed.incrementAndGet()
                         updateProgress(current, total, successCount.get(), failed)
+                        logger.warn("Fetch doc meta failed: {}", doc.title, e)
                         null
                     } finally {
                         semaphore.release()
@@ -153,8 +162,19 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
         val filled = if (total <= 0) barLength else (barLength * current / total).coerceIn(0, barLength)
         val empty = barLength - filled
         val bar = "█".repeat(filled) + "░".repeat(empty)
-        print("\r Progress: [$bar] ${percentage}% | $current/$total | Success: $success | Failed: $failed")
-        System.out.flush()
+        val bucket = if (current == total) 10 else percentage / 10
+        val previousBucket = lastLoggedProgressBucket.getAndUpdate { previous -> maxOf(previous, bucket) }
+        if (bucket > previousBucket) {
+            logger.info(
+                "Progress: [{}] {}% | {}/{} | Success: {} | Failed: {}",
+                bar,
+                percentage,
+                current,
+                total,
+                success,
+                failed
+            )
+        }
         return listOf(percentage.toString(), success.toString(), failed.toString(), bar)
     }
 
@@ -187,7 +207,17 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
                 if (body != null) return body
             } catch (e: Exception) {
                 if (attempt < retries - 1) {
+                    logger.warn(
+                        "Fetch failed, retrying {}/{} after {} ms: {}",
+                        attempt + 1,
+                        retries,
+                        config.retryDelayMs,
+                        url,
+                        e
+                    )
                     delay(config.retryDelayMs)
+                } else {
+                    logger.warn("Fetch failed after {} attempts: {}", retries, url, e)
                 }
             }
         }
@@ -208,6 +238,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
                 fields = parseTable(table)
             )
         } catch (e: Exception) {
+            logger.warn("Failed to fetch type meta: {}", doc.title, e)
             null
         }
     }
@@ -221,7 +252,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
             val result = json.decodeFromString<WikiSearchResult>(response)
             result.docs.filter { it.location.contains("Modding") }
         } catch (e: Exception) {
-            e.printStackTrace()
+            logger.error("Failed to fetch modding docs.", e)
             emptyList()
         }
     }

@@ -61,6 +61,8 @@ fun main() {
 | 系统属性 | 说明 | 示例 |
 |----------|------|------|
 | `mindustrymit.dataRoot` | 数据根目录（文档存储位置） | `-Dmindustrymit.dataRoot=/path/to/data` |
+| `mindustrymit.logDir` | 日志目录（默认 `${mindustrymit.dataRoot}/logs`） | `-Dmindustrymit.logDir=/path/to/logs` |
+| `logback.rootLevel` | 后端日志级别（默认 `INFO`） | `-Dlogback.rootLevel=DEBUG` |
 | `mindustrymit.wsToken` | WebSocket 认证 Token（可选） | `-Dmindustrymit.wsToken=mySecretToken` |
 
 ### 3. 客户端连接示例（JavaScript）

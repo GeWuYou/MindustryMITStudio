@@ -1,5 +1,6 @@
 package com.mindustry.ide.tool.json
 
+import com.mindustry.ide.tool.Logging
 import com.mindustry.ide.tool.json.JsonApi.ToolData.JsonApiWebSocketHandler
 import com.mindustry.ide.tool.json.JsonParser.Companion.jsonFormat
 import kotlinx.serialization.Serializable
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
+import org.slf4j.LoggerFactory
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import mindustry.content.Blocks
@@ -38,6 +40,10 @@ import mindustry.content.SectorPresets
 import mindustry.content.StatusEffects
 import mindustry.content.Weathers
 
+private val logger = run {
+    Logging.configureDefaults()
+    LoggerFactory.getLogger(JsonApi::class.java)
+}
 
 /**
  * 将JsonEditorTool封装成可调用的api
@@ -65,16 +71,16 @@ class JsonApi {
         private val dataRoot: File = dataRoot.absoluteFile
 
         var error: (String) -> Unit = {
-            println("Error: $it")
+            logger.error(it)
         }
         var info: (String) -> Unit = {
-            println("Info: $it")
+            logger.info(it)
         }
         var warning: (String) -> Unit = {
-            println("Warning: $it")
+            logger.warn(it)
         }
         var debug: (String) -> Unit = {
-            println("Debug: $it")
+            logger.debug(it)
         }
 
         data class InitResult(val success: Boolean, val docCount: Int, val message: String)
@@ -714,6 +720,7 @@ class JsonApi {
                         toolData.info("WebSocket 服务器已停止")
                     } catch (e: Exception) {
                         toolData.error("停止服务器失败: ${e.message}")
+                        logger.error("停止服务器失败", e)
                     } finally {
                         server = null
                     }
@@ -783,6 +790,7 @@ class JsonApi {
                         startLatch.countDown()
                     }
                     handler.toolData.error("WebSocket 错误: ${ex.message}")
+                    logger.error("WebSocket 错误", ex)
                 }
 
                 override fun onStart() {

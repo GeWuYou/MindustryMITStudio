@@ -23,12 +23,52 @@ object MindustryMitConfig {
     val wsToken: String?
         get() = optionalValue("mindustrymit.wsToken", "MINDUSTRYMIT_WS_TOKEN")
 
+    val docFetchAsyncLimit: Int
+        get() = positiveIntValue(
+            "mindustrymit.docFetch.asyncLimit",
+            "MINDUSTRYMIT_DOC_FETCH_ASYNC_LIMIT",
+            "4"
+        )
+
+    val docFetchMaxRetries: Int
+        get() = positiveIntValue(
+            "mindustrymit.docFetch.maxRetries",
+            "MINDUSTRYMIT_DOC_FETCH_MAX_RETRIES",
+            "5"
+        )
+
+    val docFetchRetryDelayMs: Long
+        get() = positiveLongValue(
+            "mindustrymit.docFetch.retryDelayMs",
+            "MINDUSTRYMIT_DOC_FETCH_RETRY_DELAY_MS",
+            "3000"
+        )
+
+    val docFetchConnectTimeoutMs: Int
+        get() = positiveIntValue(
+            "mindustrymit.docFetch.connectTimeoutMs",
+            "MINDUSTRYMIT_DOC_FETCH_CONNECT_TIMEOUT_MS",
+            "60000"
+        )
+
+    val docFetchReadTimeoutMs: Int
+        get() = positiveIntValue(
+            "mindustrymit.docFetch.readTimeoutMs",
+            "MINDUSTRYMIT_DOC_FETCH_READ_TIMEOUT_MS",
+            "60000"
+        )
+
     fun applySystemPropertyDefaults() {
         setDefault("mindustrymit.dataRoot", dataRoot)
         setDefault("mindustrymit.logDir", logDir)
         setDefault("mindustrymit.wsHost", wsHost)
         setDefault("mindustrymit.wsPort", wsPort.toString())
         wsToken?.let { setDefault("mindustrymit.wsToken", it) }
+        setDefault("mindustrymit.docFetch.asyncLimit", docFetchAsyncLimit.toString())
+        setDefault("mindustrymit.docFetch.maxRetries", docFetchMaxRetries.toString())
+        setDefault("mindustrymit.docFetch.retryDelayMs", docFetchRetryDelayMs.toString())
+        setDefault("mindustrymit.docFetch.connectTimeoutMs", docFetchConnectTimeoutMs.toString())
+        setDefault("mindustrymit.docFetch.readTimeoutMs", docFetchReadTimeoutMs.toString())
     }
 
     private fun value(propertyName: String, envName: String, defaultValue: String): String {
@@ -39,6 +79,18 @@ object MindustryMitConfig {
         return System.getProperty(propertyName).takeIfNotBlank()
             ?: System.getenv(envName).takeIfNotBlank()
             ?: loadDotenv()[envName].takeIfNotBlank()
+    }
+
+    private fun positiveIntValue(propertyName: String, envName: String, defaultValue: String): Int {
+        val raw = value(propertyName, envName, defaultValue)
+        return raw.toIntOrNull()?.takeIf { it > 0 }
+            ?: throw IllegalArgumentException("Invalid positive integer for $propertyName/$envName: $raw")
+    }
+
+    private fun positiveLongValue(propertyName: String, envName: String, defaultValue: String): Long {
+        val raw = value(propertyName, envName, defaultValue)
+        return raw.toLongOrNull()?.takeIf { it > 0L }
+            ?: throw IllegalArgumentException("Invalid positive long for $propertyName/$envName: $raw")
     }
 
     private fun setDefault(propertyName: String, value: String) {

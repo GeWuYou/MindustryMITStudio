@@ -35,6 +35,11 @@ tasks.withType<JavaExec> {
         "mindustrymit.dataRoot",
         "mindustrymit.logDir",
         "mindustrymit.wsToken",
+        "mindustrymit.docFetch.asyncLimit",
+        "mindustrymit.docFetch.maxRetries",
+        "mindustrymit.docFetch.retryDelayMs",
+        "mindustrymit.docFetch.connectTimeoutMs",
+        "mindustrymit.docFetch.readTimeoutMs",
         "logback.rootLevel"
     ).forEach { name ->
         System.getProperty(name)?.let { systemProperty(name, it) }

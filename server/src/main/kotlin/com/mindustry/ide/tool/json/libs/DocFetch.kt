@@ -2,6 +2,7 @@ package com.mindustry.ide.tool.json.libs
 
 
 import com.mindustry.ide.tool.Logging
+import com.mindustry.ide.tool.MindustryMitConfig
 import com.mindustry.ide.tool.json.FieldMeta
 import com.mindustry.ide.tool.json.TypeMeta
 import kotlinx.coroutines.*
@@ -12,11 +13,16 @@ import kotlinx.serialization.json.Json
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.slf4j.LoggerFactory
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.min
+import kotlin.random.Random
 
 @OptIn(InternalSerializationApi::class)
 @Serializable
@@ -27,13 +33,13 @@ data class WikiSearchResult(val docs: List<WikiDoc>)
 data class WikiDoc(val location: String, val text: String, val title: String)
 
 data class DocFetchConfig(
-    val asyncLimit: Int = DocFetch.ASYNC_LIMIT,
+    val asyncLimit: Int = MindustryMitConfig.docFetchAsyncLimit,
     val onlyTypes: List<String> = DocFetch.ONLY_TYPES,
     val baseUrl: String = DocFetch.BASE_URL,
-    val connectTimeoutMs: Int = DocFetch.CONNECT_TIMEOUT_MS,
-    val readTimeoutMs: Int = DocFetch.READ_TIMEOUT_MS,
-    val maxRetries: Int = DocFetch.MAX_RETRIES,
-    val retryDelayMs: Long = DocFetch.RETRY_DELAY_MS,
+    val connectTimeoutMs: Int = MindustryMitConfig.docFetchConnectTimeoutMs,
+    val readTimeoutMs: Int = MindustryMitConfig.docFetchReadTimeoutMs,
+    val maxRetries: Int = MindustryMitConfig.docFetchMaxRetries,
+    val retryDelayMs: Long = MindustryMitConfig.docFetchRetryDelayMs,
     val proxy: Proxy? = if (DocFetch.USE_PROXY) {
         Proxy(Proxy.Type.HTTP, InetSocketAddress(DocFetch.PROXY_HOST, DocFetch.PROXY_PORT))
     } else {
@@ -48,7 +54,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
             LoggerFactory.getLogger(DocFetch::class.java)
         }
 
-        var ASYNC_LIMIT = 12 // 并发数量
+        var ASYNC_LIMIT = 4 // 并发数量
         const val ESTIMATE_TIME_MS = 500L // 预估单次请求时间（毫秒）
         var TEST_AMOUNT = -1 // 测试数量，-1表示全部
         var ONLY_TYPES = listOf<String>() // 仅获取指定类型，空列表表示全部
@@ -60,6 +66,7 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
         var USE_PROXY = false // 是否使用代理
         var PROXY_HOST = "127.0.0.1" // 代理主机
         var PROXY_PORT = 10090 // 代理端口
+        private const val MAX_RETRY_DELAY_MS = 30000L
     }
 
     protected var progressCallback: ((Int, Int, Int, Int) -> Unit)? = null
@@ -181,47 +188,104 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
 
 
     protected open suspend fun fetchWithRetry(url: URL, retries: Int = config.maxRetries): String? {
-        repeat(retries) { attempt ->
+        val attempts = retries.coerceAtLeast(1)
+        repeat(attempts) { attempt ->
             try {
-                val body = withContext(Dispatchers.IO) {
-                    val connection = (config.proxy?.let { url.openConnection(it) } ?: url.openConnection()) as HttpURLConnection
-                    try {
-                        connection.apply {
-                            connectTimeout = config.connectTimeoutMs
-                            readTimeout = config.readTimeoutMs
-                            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                            setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                            setRequestProperty("Connection", "close")
-                            instanceFollowRedirects = true
-                        }
-
-                        if (connection.responseCode == 200) {
-                            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                        } else {
-                            null
-                        }
-                    } finally {
-                        connection.disconnect()
+                val response = fetchOnce(url)
+                when {
+                    response.statusCode == HttpURLConnection.HTTP_OK -> return response.body
+                    isRetryableStatus(response.statusCode) && attempt < attempts - 1 -> {
+                        val delayMs = retryDelayMs(attempt)
+                        logger.warn(
+                            "Fetch returned HTTP {}, retrying {}/{} after {} ms: {}",
+                            response.statusCode,
+                            attempt + 1,
+                            attempts,
+                            delayMs,
+                            url
+                        )
+                        delay(delayMs)
+                    }
+                    isRetryableStatus(response.statusCode) -> {
+                        logger.warn("Fetch failed after {} attempts with HTTP {}: {}", attempts, response.statusCode, url)
+                    }
+                    else -> {
+                        logger.warn("Fetch returned non-retryable HTTP {}: {}", response.statusCode, url)
+                        return null
                     }
                 }
-                if (body != null) return body
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (attempt < retries - 1) {
+                if (isRetryableException(e) && attempt < attempts - 1) {
+                    val delayMs = retryDelayMs(attempt)
                     logger.warn(
                         "Fetch failed, retrying {}/{} after {} ms: {}",
                         attempt + 1,
-                        retries,
-                        config.retryDelayMs,
-                        url,
-                        e
+                        attempts,
+                        delayMs,
+                        url
                     )
-                    delay(config.retryDelayMs)
+                    delay(delayMs)
+                } else if (isRetryableException(e)) {
+                    logger.warn("Fetch failed after {} attempts: {}", attempts, url, e)
                 } else {
-                    logger.warn("Fetch failed after {} attempts: {}", retries, url, e)
+                    logger.warn("Fetch failed with non-retryable error: {}", url, e)
+                    return null
                 }
             }
         }
         return null
+    }
+
+    protected open suspend fun fetchOnce(url: URL): FetchResponse = withContext(Dispatchers.IO) {
+        val connection = (config.proxy?.let { url.openConnection(it) } ?: url.openConnection()) as HttpURLConnection
+        try {
+            connection.apply {
+                connectTimeout = config.connectTimeoutMs
+                readTimeout = config.readTimeoutMs
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                setRequestProperty("Connection", "close")
+                instanceFollowRedirects = true
+            }
+
+            val statusCode = connection.responseCode
+            val body = if (statusCode == HttpURLConnection.HTTP_OK) {
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                null
+            }
+            FetchResponse(statusCode, body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    protected open fun retryDelayMs(attempt: Int): Long {
+        val exponentialDelay = config.retryDelayMs.saturatingMultiply(1L shl min(attempt, 10))
+        return min(exponentialDelay, MAX_RETRY_DELAY_MS) + retryJitterMs()
+    }
+
+    protected open fun retryJitterMs(): Long {
+        return Random.nextLong(0L, 501L)
+    }
+
+    private fun isRetryableStatus(statusCode: Int): Boolean {
+        return statusCode == HttpURLConnection.HTTP_CLIENT_TIMEOUT ||
+            statusCode == 429 ||
+            statusCode in 500..599
+    }
+
+    private fun isRetryableException(e: Exception): Boolean {
+        return e is SocketException ||
+            e is SocketTimeoutException ||
+            e is IOException
+    }
+
+    private fun Long.saturatingMultiply(multiplier: Long): Long {
+        if (this <= 0L || multiplier <= 0L) return 0L
+        return if (this > Long.MAX_VALUE / multiplier) Long.MAX_VALUE else this * multiplier
     }
 
     protected open suspend fun fetchTypeMeta(doc: WikiDoc): TypeMeta? {
@@ -271,3 +335,5 @@ open class DocFetch(private val config: DocFetchConfig = DocFetchConfig()) {
     }
 
 }
+
+data class FetchResponse(val statusCode: Int, val body: String?)
